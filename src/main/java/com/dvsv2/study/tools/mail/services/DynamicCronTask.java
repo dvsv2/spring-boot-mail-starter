@@ -1,0 +1,142 @@
+package com.dvsv2.study.tools.mail.services;
+
+import com.dvsv2.study.tools.mail.MyEmail;
+import com.dvsv2.study.tools.mail.annotation.Email;
+import com.dvsv2.study.tools.mail.annotation.EmailClient;
+import com.dvsv2.study.tools.mail.annotation.EmailFolder;
+import com.google.common.base.Strings;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.scheduling.Trigger;
+import org.springframework.scheduling.TriggerContext;
+import org.springframework.scheduling.annotation.SchedulingConfigurer;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.CronTrigger;
+import org.springframework.scheduling.support.PeriodicTrigger;
+import org.springframework.stereotype.Component;
+
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Created by liangs on 17/5/10.
+ */
+@Lazy(false)
+@Component
+public class DynamicCronTask implements SchedulingConfigurer {
+
+    @Value("${email.cron:''}")
+    private String cron;
+    @Value("${email.interval:60}")
+    private Long interval = 60L;
+    @Value("${email.timeout:60}")
+    private Integer timeOut = 60;
+
+    @Autowired
+    private RecoverMailServer recoverMailServer;
+
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
+        List<InvokeHandler> invokeHandlers = ParseInvokeHandler.parse();
+        taskRegistrar.addTriggerTask(new Runnable() {
+            @Override
+            public void run() {
+                for (InvokeHandler invokeHandler : invokeHandlers) {
+                    MyEmail m = new MyEmail();
+                    m.setSubject("email test");
+                    invokeHandler.handle(m);
+                }
+            }
+        }, new Trigger() {
+            @Override
+            public Date nextExecutionTime(TriggerContext triggerContext) {
+                if (Strings.isNullOrEmpty(cron)) {
+                    CronTrigger trigger = new CronTrigger(cron);
+                    return trigger.nextExecutionTime(triggerContext);
+                }
+                PeriodicTrigger periodicTrigger = new PeriodicTrigger(interval, TimeUnit.SECONDS);
+                return periodicTrigger.nextExecutionTime(triggerContext);
+            }
+        });
+    }
+
+    @Component
+    private static class ParseInvokeHandler implements ApplicationContextAware {
+
+        private static ApplicationContext applicationContext;
+
+        @Override
+        public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+            ParseInvokeHandler.applicationContext = applicationContext;
+        }
+
+        private static List<InvokeHandler> parse() {
+            List<InvokeHandler> notifyMethod = new ArrayList<InvokeHandler>();
+            Map<String, Object> beanMap = applicationContext.getBeansWithAnnotation(EmailClient.class);
+            for (Object obj : beanMap.values()) {
+                Method[] methods = obj.getClass().getMethods();
+                for (Method method : methods) {
+                    EmailFolder emailFolder = AnnotationUtils.findAnnotation(method, EmailFolder.class);
+                    if (null != emailFolder) {
+                        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+                        Class[] parameterTypes = method.getParameterTypes();
+                        int i = 0;
+                        List<Integer> offsets = new ArrayList<>();
+                        List<Object> objects = new ArrayList<>();
+                        for (Annotation[] annotations : parameterAnnotations) {
+                            Class parameterType = parameterTypes[i++];
+                            objects.add(resolveProvidedArgument(parameterType));
+                            for (Annotation annotation : annotations) {
+                                if (annotation instanceof Email) {
+                                    if (parameterType.getName().equals(MyEmail.class.getName())) {
+                                        offsets.add(i - 1);
+                                    }
+                                }
+                            }
+                        }
+                        notifyMethod.add(new InvokeHandler(obj, method, offsets, objects));
+                    }
+                }
+            }
+            return notifyMethod;
+        }
+
+        private static Object resolveProvidedArgument(Class paramterType) {
+            if (paramterType.getName().equals(int.class.getName())) {
+                return 0;
+            }
+            if (paramterType.getName().equals(short.class.getName())) {
+                return (byte) 0;
+            }
+            if (paramterType.getName().equals(byte.class.getName())) {
+                return (byte) 0;
+            }
+            if (paramterType.getName().equals(boolean.class.getName())) {
+                return false;
+            }
+            if (paramterType.getName().equals(float.class.getName())) {
+                return 0.0;
+            }
+            if (paramterType.getName().equals(double.class.getName())) {
+                return 0.00;
+            }
+            if (paramterType.getName().equals(long.class.getName())) {
+                return 0L;
+            }
+            if (paramterType.getName().equals(char.class.getName())) {
+                return '0';
+            }
+            return null;
+        }
+    }
+}

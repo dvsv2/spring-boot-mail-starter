@@ -1,0 +1,6 @@
+.idea/
+spring-boot-mail-starter.iml
+target/
+Application.java
+application.properties
+logback-spring.xml
