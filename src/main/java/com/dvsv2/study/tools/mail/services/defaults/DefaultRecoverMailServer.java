@@ -4,7 +4,6 @@ import com.dvsv2.study.tools.mail.MyEmail;
 import com.dvsv2.study.tools.mail.services.RecoverMailServer;
 import com.dvsv2.study.tools.mail.services.StoreSessionFactory;
 import com.sun.mail.pop3.POP3Folder;
-import freemarker.template.utility.DateUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,16 +12,10 @@ import javax.mail.*;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeUtility;
-import javax.mail.search.AndTerm;
-import javax.mail.search.ComparisonTerm;
-import javax.mail.search.SearchTerm;
-import javax.mail.search.SentDateTerm;
 import java.io.*;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 /**
  * Created by liangs on 17/3/31.
@@ -38,36 +31,39 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
     private List<String> lastUids = new ArrayList<>();
     private Date date = null;
 
-    public DefaultRecoverMailServer(StoreSessionFactory storeSessionFactory, String saveAttachPath) {
+    public DefaultRecoverMailServer(StoreSessionFactory storeSessionFactory, String saveAttachPath) throws ParseException {
         this.storeSessionFactory = storeSessionFactory;
         this.saveAttachPath = saveAttachPath;
-        this.date = new Date();
+//        this.date = new Date();
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+        this.date = sdf.parse("2017-05-22 00:00:00");
+//        this.date = new Date();
     }
 
     @Override
     public List<MyEmail> getNewMail() throws Exception {
         Calendar cal = Calendar.getInstance();
+        cal.setTime(this.date);
         cal.add(Calendar.MINUTE, -2);
         Date relativeDate = cal.getTime();
         ArrayList<MyEmail> result = new ArrayList<MyEmail>();
         Store store = this.storeSessionFactory.getStore();
         Folder messageFolder = store.getFolder("INBOX");
         POP3Folder folder = (POP3Folder) messageFolder;
-        folder.open(Folder.READ_ONLY);
-        FetchProfile profile = new FetchProfile();
-        profile.add(UIDFolder.FetchProfileItem.UID);
-        Message[] messages = folder.getMessages();
-        LOGGER.info("find new  emails size :" + messages.length);
-        folder.fetch(messages, profile);
-        folder.search(new AndTerm(new UidSearchTerm(), new SentDateTerm(ComparisonTerm.LT, relativeDate)));
+        folder.open(Folder.READ_WRITE);
+
+        List<Message> messages = getMessages(folder.getMessageCount(), relativeDate, folder);
+        LOGGER.info("find new  emails size :" + messages.size());
         ArrayList<Message> goalMessages = new ArrayList<Message>();
         for (Message tmp : messages) {
-                goalMessages.add(tmp);
+            goalMessages.add(tmp);
         }
         if (!goalMessages.isEmpty()) {
             result = this.getEmail(goalMessages, folder);
         }
         this.storeSessionFactory.closeOne(store);
+        folder.close(true);
         return result;
     }
 
@@ -259,25 +255,42 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
         return bodytext.toString();
     }
 
-    private class UidSearchTerm  extends SearchTerm{
 
-        @Override
-        public boolean match(Message msg) {
-            POP3Folder pop3Folder = (POP3Folder) msg.getFolder();
-            String uid = "";
-            try {
-                uid = pop3Folder.getUID(msg);
-            } catch (MessagingException e) {
-                e.printStackTrace();
-                return false;
+    public List<Message> getMessages(int end, Date date, Folder folder) throws MessagingException {
+        int start = end - 9;
+        Message[] messages = folder.getMessages(start, end);
+        FetchProfile profile = new FetchProfile();
+        profile.add(UIDFolder.FetchProfileItem.UID);
+        folder.fetch(messages, profile);
+        List<Message> result = new ArrayList<>();
+        List<Message> msgs = Arrays.asList(messages);
+        Collections.reverse(msgs);
+        for (Message tmp : msgs) {
+            if (match(tmp, date)) {
+                result.add(tmp);
+            } else {
+                return result;
             }
-            if (!lastUids.contains(uid)) {
-                return true;
-            }
-            return false;
         }
+        result.addAll(getMessages(start, date, folder));
+        return result;
     }
 
+    public boolean match(Message msg, Date date) throws MessagingException {
+        POP3Folder pop3Folder = (POP3Folder) msg.getFolder();
+        String uid = "";
+        try {
+            uid = pop3Folder.getUID(msg);
+        } catch (MessagingException e) {
+            e.printStackTrace();
+            return false;
+        }
+        if (date.before(msg.getSentDate()) && !lastUids.contains(uid)) {
+            this.lastUids.add(uid);
+            return true;
+        }
+        return false;
+    }
 
 
 }

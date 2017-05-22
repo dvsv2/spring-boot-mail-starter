@@ -19,10 +19,29 @@ public class EmailProperties {
 
     private Integer port = 110;
 
-    private Integer timeout;
+    private Integer timeout = 60;
 
     private String path;
 
+    private Long interval = 60L;
+
+    private String cron;
+
+    public String getCron() {
+        return cron;
+    }
+
+    public void setCron(String cron) {
+        this.cron = cron;
+    }
+
+    public Long getInterval() {
+        return interval;
+    }
+
+    public void setInterval(Long interval) {
+        this.interval = interval;
+    }
 
     public String getPath() {
         return path;

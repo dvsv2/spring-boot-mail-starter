@@ -4,6 +4,7 @@ import com.dvsv2.study.tools.mail.MyEmail;
 import com.dvsv2.study.tools.mail.annotation.Email;
 import com.dvsv2.study.tools.mail.annotation.EmailClient;
 import com.dvsv2.study.tools.mail.annotation.EmailFolder;
+import com.dvsv2.study.tools.mail.autoconfigure.EmailProperties;
 import com.google.common.base.Strings;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,12 +36,9 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class DynamicCronTask implements SchedulingConfigurer {
 
-    @Value("${email.cron:''}")
-    private String cron;
-    @Value("${email.interval:60}")
-    private Long interval = 60L;
-    @Value("${email.timeout:60}")
-    private Integer timeOut = 60;
+
+    @Autowired
+    private EmailProperties properties;
 
     @Autowired
     private RecoverMailServer recoverMailServer;
@@ -51,20 +49,28 @@ public class DynamicCronTask implements SchedulingConfigurer {
         taskRegistrar.addTriggerTask(new Runnable() {
             @Override
             public void run() {
-                for (InvokeHandler invokeHandler : invokeHandlers) {
-                    MyEmail m = new MyEmail();
-                    m.setSubject("email test");
-                    invokeHandler.handle(m);
+                List<MyEmail> emails = null;
+                try {
+                    emails = recoverMailServer.getNewMail();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                if (null != emails && emails.size() > 0) {
+                    for (InvokeHandler invokeHandler : invokeHandlers) {
+                        for (MyEmail myEmail : emails) {
+                            invokeHandler.handle(myEmail);
+                        }
+                    }
                 }
             }
         }, new Trigger() {
             @Override
             public Date nextExecutionTime(TriggerContext triggerContext) {
-                if (Strings.isNullOrEmpty(cron)) {
-                    CronTrigger trigger = new CronTrigger(cron);
+                if (!Strings.isNullOrEmpty(properties.getCron())) {
+                    CronTrigger trigger = new CronTrigger(properties.getCron());
                     return trigger.nextExecutionTime(triggerContext);
                 }
-                PeriodicTrigger periodicTrigger = new PeriodicTrigger(interval, TimeUnit.SECONDS);
+                PeriodicTrigger periodicTrigger = new PeriodicTrigger(properties.getInterval(), TimeUnit.SECONDS);
                 return periodicTrigger.nextExecutionTime(triggerContext);
             }
         });

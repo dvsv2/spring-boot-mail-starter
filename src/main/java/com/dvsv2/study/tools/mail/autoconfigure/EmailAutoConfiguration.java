@@ -24,6 +24,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.util.Assert;
 
 import javax.annotation.PostConstruct;
+import java.text.ParseException;
 import java.util.List;
 
 
@@ -59,7 +60,7 @@ public class EmailAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public RecoverMailServer recoverMailServer(StoreSessionFactory storeSessionFactory) {
+    public RecoverMailServer recoverMailServer(StoreSessionFactory storeSessionFactory) throws ParseException {
         logger.info("create default RecoverMailServer bean");
         return new DefaultRecoverMailServer(storeSessionFactory, (this.properties.getPath()));
     }
