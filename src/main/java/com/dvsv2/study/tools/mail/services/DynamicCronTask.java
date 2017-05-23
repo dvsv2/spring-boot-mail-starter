@@ -6,6 +6,8 @@ import com.dvsv2.study.tools.mail.annotation.EmailClient;
 import com.dvsv2.study.tools.mail.annotation.EmailFolder;
 import com.dvsv2.study.tools.mail.autoconfigure.EmailProperties;
 import com.google.common.base.Strings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,6 +23,7 @@ import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.scheduling.support.PeriodicTrigger;
 import org.springframework.stereotype.Component;
 
+import java.awt.image.ImageConsumer;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -32,23 +35,26 @@ import java.util.concurrent.TimeUnit;
 /**
  * Created by liangs on 17/5/10.
  */
-@Lazy(false)
-@Component
-public class DynamicCronTask implements SchedulingConfigurer {
+public class DynamicCronTask implements SchedulingConfigurer,ApplicationContextAware {
 
-
-    @Autowired
     private EmailProperties properties;
-
-    @Autowired
     private RecoverMailServer recoverMailServer;
+    private ApplicationContext applicationContext;
+
+    public static final Logger LOGGER = LoggerFactory.getLogger(DynamicCronTask.class);
+
+    public DynamicCronTask(EmailProperties emailProperties,RecoverMailServer recoverMailServer) {
+        this.properties = emailProperties;
+        this.recoverMailServer = recoverMailServer;
+    }
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
-        List<InvokeHandler> invokeHandlers = ParseInvokeHandler.parse();
+        List<InvokeHandler> invokeHandlers = ParseInvokeHandler.parse(this.applicationContext);
         taskRegistrar.addTriggerTask(new Runnable() {
             @Override
             public void run() {
+
                 List<MyEmail> emails = null;
                 try {
                     emails = recoverMailServer.getNewMail();
@@ -76,17 +82,14 @@ public class DynamicCronTask implements SchedulingConfigurer {
         });
     }
 
-    @Component
-    private static class ParseInvokeHandler implements ApplicationContextAware {
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.applicationContext = applicationContext;
+    }
 
-        private static ApplicationContext applicationContext;
+    private static class ParseInvokeHandler {
 
-        @Override
-        public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-            ParseInvokeHandler.applicationContext = applicationContext;
-        }
-
-        private static List<InvokeHandler> parse() {
+        private static List<InvokeHandler> parse(ApplicationContext applicationContext) {
             List<InvokeHandler> notifyMethod = new ArrayList<InvokeHandler>();
             Map<String, Object> beanMap = applicationContext.getBeansWithAnnotation(EmailClient.class);
             for (Object obj : beanMap.values()) {

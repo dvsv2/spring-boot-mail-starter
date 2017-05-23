@@ -37,8 +37,8 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
 //        this.date = new Date();
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
-        this.date = sdf.parse("2017-05-22 00:00:00");
-//        this.date = new Date();
+//        this.date = sdf.parse("2017-05-22 00:00:00");
+        this.date = new Date();
     }
 
     @Override

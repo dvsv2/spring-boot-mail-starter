@@ -1,5 +1,6 @@
 package com.dvsv2.study.tools.mail.autoconfigure;
 
+import com.dvsv2.study.tools.mail.services.DynamicCronTask;
 import com.dvsv2.study.tools.mail.services.StoreSessionFactory;
 import com.dvsv2.study.tools.mail.services.defaults.DefaultStoreSessionFactory;
 import com.dvsv2.study.tools.mail.services.defaults.StoreSessionPool;
@@ -64,4 +65,14 @@ public class EmailAutoConfiguration {
         logger.info("create default RecoverMailServer bean");
         return new DefaultRecoverMailServer(storeSessionFactory, (this.properties.getPath()));
     }
+
+
+    @Bean
+    public DynamicCronTask dynamicCronTask(RecoverMailServer recoverMailServer) {
+        return new DynamicCronTask(properties, recoverMailServer);
+    }
+
+
+
+
 }

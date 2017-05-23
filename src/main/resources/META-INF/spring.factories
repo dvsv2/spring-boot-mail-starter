@@ -1,3 +1,4 @@
 # Auto Configure
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-com.dvsv2.study.tools.mail.autoconfigure.EmailAutoConfiguration
+com.dvsv2.study.tools.mail.autoconfigure.EmailAutoConfiguration,\
+com.dvsv2.study.tools.mail.autoconfigure.MailHandlerRegister
