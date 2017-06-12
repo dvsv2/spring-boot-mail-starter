@@ -35,7 +35,6 @@ import java.util.Set;
 /**
  * Created by liangs on 17/4/1.
  */
-@Configuration
 public class MailHandlerRegister implements BeanFactoryPostProcessor, ApplicationContextAware,BeanFactoryAware{
 
     private static final Logger logger = LoggerFactory.getLogger(MailHandlerRegister.class);
@@ -107,10 +106,6 @@ public class MailHandlerRegister implements BeanFactoryPostProcessor, Applicatio
             if (innerClass.isInterface()) {
                 return (T) InterfaceProxy.newInstance(innerClass);
             } else {
-//                Enhancer enhancer = new Enhancer();
-//                enhancer.setSuperclass(innerClass);
-//                enhancer.setNamingPolicy(SpringNamingPolicy.INSTANCE);
-//                enhancer.setCallback(new MethodInterceptorImpl());
                 return (T) innerClass.newInstance();
             }
         }

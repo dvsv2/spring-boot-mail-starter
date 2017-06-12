@@ -1,5 +1,7 @@
 package com.dvsv2.study.tools.mail.annotation;
 
+import org.springframework.stereotype.Component;
+
 import java.lang.annotation.*;
 
 /**
@@ -8,6 +10,7 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
 @Documented
+@Component
 public @interface EmailClient {
 
 }

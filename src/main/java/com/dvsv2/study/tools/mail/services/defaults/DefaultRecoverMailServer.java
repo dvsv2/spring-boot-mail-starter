@@ -3,7 +3,13 @@ package com.dvsv2.study.tools.mail.services.defaults;
 import com.dvsv2.study.tools.mail.MyEmail;
 import com.dvsv2.study.tools.mail.services.RecoverMailServer;
 import com.dvsv2.study.tools.mail.services.StoreSessionFactory;
+import com.google.common.base.Strings;
 import com.sun.mail.pop3.POP3Folder;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Attributes;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,18 +33,18 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
     private StoreSessionFactory storeSessionFactory;
 
     private String saveAttachPath = "";
-
+    private String url = "";
     private List<String> lastUids = new ArrayList<>();
     private Date date = null;
 
-    public DefaultRecoverMailServer(StoreSessionFactory storeSessionFactory, String saveAttachPath) throws ParseException {
+    public DefaultRecoverMailServer(StoreSessionFactory storeSessionFactory, String saveAttachPath, String url) throws ParseException {
         this.storeSessionFactory = storeSessionFactory;
         this.saveAttachPath = saveAttachPath;
-//        this.date = new Date();
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-
-//        this.date = sdf.parse("2017-05-22 00:00:00");
-        this.date = new Date();
+        this.url = url;
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(new Date());
+        cal.add(Calendar.MINUTE, 2);
+        this.date = cal.getTime();
     }
 
     @Override
@@ -47,6 +53,8 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
         cal.setTime(this.date);
         cal.add(Calendar.MINUTE, -2);
         Date relativeDate = cal.getTime();
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        LOGGER.info("current time " + sdf.format(relativeDate));
         ArrayList<MyEmail> result = new ArrayList<MyEmail>();
         Store store = this.storeSessionFactory.getStore();
         Folder messageFolder = store.getFolder("INBOX");
@@ -79,9 +87,8 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
             myEmail.setToadd(this.getMailAddress("to", mimeMessage));
             myEmail.setUid(folder.getUID(tmpMessage));
             myEmail.setSubject(this.getSubject(mimeMessage));
-            String context = this.getMailContent((Part) tmpMessage);
             myEmail.setFilepath(this.saveAttachMent((Part) tmpMessage));
-            myEmail.setContext(context);
+            myEmail.setContext(buildContent(this.getMailContent((Part) tmpMessage)));
             myEmail.setMessage(tmpMessage);
             emails.add(myEmail);
         }
@@ -109,6 +116,10 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
                         && ((disposition.equals(Part.ATTACHMENT)) || (disposition
                         .equals(Part.INLINE)))) {
                     fileName = mpart.getFileName();
+                    String[] str = mpart.getHeader("Content-Id");
+                    if (str != null && str.length > 0) {
+                        fileName = str[0].substring(str[0].indexOf("<") + 1, str[0].indexOf(">"));
+                    }
                     if (fileName != null) {
                         if (fileName.toLowerCase().indexOf("gb2312") != -1) {
                             fileName = MimeUtility.decodeText(fileName);
@@ -117,7 +128,18 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
                         path.append(fileName + "&&&");
                     }
                 } else if (mpart.isMimeType("multipart/*")) {
-                    saveAttachMent(mpart);
+                    path.append(saveAttachMent(mpart));
+                } else if (mpart.isMimeType("application/octet-stream")) {
+                    fileName = mpart.getFileName();
+                    String[] str = mpart.getHeader("Content-Id");
+                    if (str != null && str.length > 0) {
+                        fileName = str[0].substring(str[0].indexOf("<") + 1, str[0].indexOf(">"));
+                    }
+                    if (fileName != null) {
+                        fileName = MimeUtility.decodeText(fileName);
+                        saveFile(fileName, mpart.getInputStream());
+                        path.append(fileName + "&&&");
+                    }
                 } else {
                     fileName = mpart.getFileName();
                     if (fileName != null) {
@@ -128,15 +150,17 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
                 }
             }
         } else if (part.isMimeType("message/rfc822")) {
-            saveAttachMent((Part) part.getContent());
+            return saveAttachMent((Part) part.getContent());
         }
         return path.toString();
     }
 
-    private String saveFile(String fileName, InputStream in) throws Exception {
-
+    public String saveFile(String fileName, InputStream in) throws Exception {
         String osName = System.getProperty("os.name");
         String storedir = this.saveAttachPath;
+        if (Strings.isNullOrEmpty(storedir)) {
+            return "";
+        }
         String separator = "";
         if (osName == null)
             osName = "";
@@ -147,8 +171,16 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
         } else {
             separator = "/";
         }
-        String path = storedir + separator + fileName;
+        File file = new File(storedir + separator);
+        if (!file.exists() && !file.isDirectory()) {
+            System.out.println("文件夹不存在新建");
+            file.mkdir();
+        }
+        String path = storedir + separator + fileName + ".jpg";
         File storefile = new File(path);
+        if (storefile.exists()) {
+            return path;
+        }
         BufferedOutputStream bos = null;
         BufferedInputStream bis = null;
         try {
@@ -224,13 +256,13 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
 
     private String getSentDate(MimeMessage mimeMessage) throws Exception {
         Date date = mimeMessage.getSentDate();
-        SimpleDateFormat format = new SimpleDateFormat("YYYY-MM-dd HH:mm:ss");
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         return format.format(date);
     }
 
 
     public String getMailContent(Part part) throws Exception {
-        StringBuffer bodytext = new StringBuffer();
+        StringBuffer bodytext = new StringBuffer();//存放邮件内容
         String contenttype = part.getContentType();
         int nameindex = contenttype.indexOf("name");
         boolean conname = false;
@@ -240,24 +272,32 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
         if (part.isMimeType("text/plain") && !conname) {
             bodytext.append((String) part.getContent());
         } else if (part.isMimeType("text/html") && !conname) {
-
+            String content = (String) part.getContent();
+            if (!content.contains("<body")) {
+                bodytext.append("<body>");
+            }
             bodytext.append((String) part.getContent());
+            bodytext.append("</body>");
         } else if (part.isMimeType("multipart/*")) {
-
             Multipart multipart = (Multipart) part.getContent();
             int counts = multipart.getCount();
             for (int i = 0; i < counts; i++) {
-                getMailContent(multipart.getBodyPart(i));
+               bodytext.append(getMailContent(multipart.getBodyPart(i)));
             }
         } else if (part.isMimeType("message/rfc822")) {
-            getMailContent((Part) part.getContent());
+            bodytext.append(getMailContent((Part) part.getContent()));
+        } else {
         }
         return bodytext.toString();
     }
 
 
     public List<Message> getMessages(int end, Date date, Folder folder) throws MessagingException {
+        if (end <= 0) {
+            return new ArrayList<>();
+        }
         int start = end - 9;
+        start = start < 1 ? 1 : start;
         Message[] messages = folder.getMessages(start, end);
         FetchProfile profile = new FetchProfile();
         profile.add(UIDFolder.FetchProfileItem.UID);
@@ -280,6 +320,9 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
         POP3Folder pop3Folder = (POP3Folder) msg.getFolder();
         String uid = "";
         try {
+            if (msg.getSentDate().after(this.date)) {
+                this.date = msg.getSentDate();
+            }
             uid = pop3Folder.getUID(msg);
         } catch (MessagingException e) {
             e.printStackTrace();
@@ -287,9 +330,37 @@ public class DefaultRecoverMailServer implements RecoverMailServer {
         }
         if (date.before(msg.getSentDate()) && !lastUids.contains(uid)) {
             this.lastUids.add(uid);
+            if (msg.getSentDate().after(this.date)) {
+
+            }
             return true;
         }
         return false;
+    }
+
+    private String buildContent(String str) {
+        if (!str.contains("body")) {
+            return str;
+        }
+        Document doc = Jsoup.parse(str);
+        Element element = doc.body();
+        if (Strings.isNullOrEmpty(this.url) || Strings.isNullOrEmpty(this.saveAttachPath)) {
+            return element.html();
+        }
+        str = str.substring(str.indexOf("<"));
+        Elements elements = element.select("img");
+        Iterator<Element> iterator = elements.iterator();
+        while (iterator.hasNext()) {
+            Element tmp = iterator.next();
+            Attributes attributes = tmp.attributes();
+            if (attributes.hasKey("src")) {
+                String src = attributes.get("src");
+                String cid = src.substring(src.indexOf("cid:") + 4);
+                tmp.removeAttr("src");
+                tmp.attr("src", String.format(this.url + "/%s.jpg", cid));
+            }
+        }
+        return element.html();
     }
 
 

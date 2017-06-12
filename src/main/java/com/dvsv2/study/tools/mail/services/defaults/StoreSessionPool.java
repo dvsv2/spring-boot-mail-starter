@@ -5,6 +5,8 @@ import com.sun.mail.util.MailSSLSocketFactory;
 import org.apache.commons.pool2.PooledObject;
 import org.apache.commons.pool2.PooledObjectFactory;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.mail.Session;
 import javax.mail.Store;
@@ -18,6 +20,8 @@ import java.util.Properties;
 public class StoreSessionPool implements PooledObjectFactory<Store> {
 
     private EmailProperties properties;
+
+    public static final Logger LOGGER = LoggerFactory.getLogger(StoreSessionPool.class);
 
     public StoreSessionPool(EmailProperties emailProperties) {
         this.properties = emailProperties;
@@ -48,6 +52,7 @@ public class StoreSessionPool implements PooledObjectFactory<Store> {
         store.addConnectionListener(new StoreConnectionListener());
         store.connect();
         PooledObject<Store> poolObject = new DefaultPooledObject(store);
+        LOGGER.info("open email " + this.properties.getUsername());
         return poolObject;
     }
 

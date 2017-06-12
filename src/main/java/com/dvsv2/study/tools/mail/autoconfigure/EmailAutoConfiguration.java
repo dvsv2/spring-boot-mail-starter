@@ -63,7 +63,7 @@ public class EmailAutoConfiguration {
     @ConditionalOnMissingBean
     public RecoverMailServer recoverMailServer(StoreSessionFactory storeSessionFactory) throws ParseException {
         logger.info("create default RecoverMailServer bean");
-        return new DefaultRecoverMailServer(storeSessionFactory, (this.properties.getPath()));
+        return new DefaultRecoverMailServer(storeSessionFactory, this.properties.getPath(), this.properties.getImg_url());
     }
 
 

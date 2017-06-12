@@ -54,7 +54,6 @@ public class DynamicCronTask implements SchedulingConfigurer,ApplicationContextA
         taskRegistrar.addTriggerTask(new Runnable() {
             @Override
             public void run() {
-
                 List<MyEmail> emails = null;
                 try {
                     emails = recoverMailServer.getNewMail();
